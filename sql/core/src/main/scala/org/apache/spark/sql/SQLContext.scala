@@ -636,6 +636,44 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Loads a CSV file, returning the result as a [[DataFrame]].
+   * @group specificdata
+   */
+  def csvFile(path: String, header: Boolean, columns: List[String], sep: String): DataFrame = {
+    if (path.isEmpty) {
+      emptyDataFrame
+    } else {
+      val csv = sparkContext.textFile(path).map(_.split(sep))
+      if (columns.length == 0) {
+        val titles = csv.first().toList
+        if (!header) {
+          val newTitles = (1 to titles.length).map(x => ("X" + x)).toList
+          csvFile(csv, newTitles)
+        } else {
+          val data = csv.zipWithIndex().filter(_._2 > 0).map(_._1)
+          csvFile(data, titles)
+        }
+      } else {
+        csvFile(csv, columns)
+      }
+    }
+  }
+
+  /**
+   * :: Experimental ::
+   * Loads a CSV file and applies the given schema,
+   * returning the result as a [[DataFrame]].
+   *
+   * @group specificdata
+   */
+  @Experimental
+  def csvFile(csv: RDD[Array[String]], titles: List[String]): DataFrame = {
+    val schema = StructType(titles.map(field => StructField(field, StringType, true)))
+    val rowRDD = csv.map(line => Row(line.map(field => field.toString):_*))
+    applySchema(rowRDD, schema)
+  }
+
+  /**
    * :: Experimental ::
    * Returns the dataset stored at path as a DataFrame,
    * using the default data source configured by spark.sql.sources.default.
